@@ -1,51 +1,48 @@
 use rand::Rng;
 use std::fmt;
 use std::io;
-use strum::{EnumCount, IntoEnumIterator};
-use strum_macros::{EnumCount as EnumCountMacro, EnumIter, IntoStaticStr};
+use strum::{EnumCount, IntoEnumIterator, VariantNames};
+use strum_macros::{EnumCount as EnumCountMacro, EnumIter, IntoStaticStr, EnumVariantNames};
 
 fn main() {}
 
-// fn generate_sample_ballot(
-//     group_number: u32,
-//     household_number: u32,
-//     building_number: u32,
-// ) -> Ballot {
-//     // A ballot consissts of a list of buildings, groups, and accommodation
-//     let mut buildings: Vec<u32> = (1..building_number).map(|n| 2 * n).collect();
-//     let mut buildings: Vec<String> = (1..building_number)
-//         .map(|i| format!("Building {j}", j = i.to_string()).to_string())
-//         .collect();
+fn generate_sample_ballot(
+    group_number: u32,
+    household_number: u32,
+    building_number: u32,
+) -> Ballot {
+    // A ballot consissts of a list of buildings, groups, and accommodation
+    let buildings = Building::;
 
-//     // Generate groups:
-//     let mut groups: Vec<Group> = Vec::new();
-//     for i in 1..group_number {
-//         let mut members: Vec<Person> = Vec::new();
-//         for j in 1..i * 2 {
-//             members.push(Person {
-//                 name: format!("Person {j} in group {i}").to_string(),
-//                 score: i * 10 + j * 4,
-//             })
-//         }
-//         groups.push(Group {
-//             members,
-//             household_preferences: None,
-//             building_preferences: None,
-//         })
-//     }
+    // Generate groups:
+    let mut groups: Vec<Group> = Vec::new();
+    for i in 1..group_number {
+        let mut members: Vec<Person> = Vec::new();
+        for j in 1..i * 2 {
+            members.push(Person {
+                name: format!("Person {j} in group {i}").to_string(),
+                score: i * 10 + j * 4,
+            })
+        }
+        groups.push(Group {
+            members,
+            household_preferences: None,
+            building_preferences: None,
+        })
+    }
 
-//     // Generate accommodation:
-//     let mut accommodation: Vec<Household> = Vec::new();
-//     for i in 1..household_number {
-//         // Generate household
-//         let mut rng = rand::thread_rng();
-//         let size = (8i32 + rng.gen_range::<i32>(-8..8)) as u32;
-//         Household {
-//             name: format!("Household {i}")
-//             size:
-//         }
-//     } // left off here
-// }
+    // Generate accommodation:
+    let mut accommodation: Vec<Household> = Vec::new();
+    for i in 1..household_number {
+        // Generate household
+        let mut rng = rand::thread_rng();
+        let size = (8i32 + rng.gen_range::<i32>(-8..8)) as u32;
+        Household {
+            name: format!("Household {i}"),
+            size:
+        }
+    } // left off here
+}
 
 struct Ballot {
     buildings: [Building; Building::COUNT],
@@ -170,17 +167,22 @@ impl Household {
     }
     fn can_fit(&self, new_group: &Group) -> bool {
         // A household can fit a group if its current occupants combined with the group's members is not bigger than its size
+
         // use the "as" type cast expression to coerce usizes into u32s
         return self.occupants.len() as u32 + new_group.members.len() as u32 > self.size;
     }
     fn add_group(&mut self, new_group: &Group) {
         // NTS: Should probably refactor to include the can_fit logic and return a Result type
-        let mut member_vec = new_group.members.clone();
-        self.occupants.append(&mut member_vec);
+        if self.can_fit(new_group) {
+            let mut member_vec = new_group.members.clone();
+            self.occupants.append(&mut member_vec);
+        } else {
+            panic!();
+        }
     }
 }
 
-#[derive(Clone, Debug, Copy, PartialEq, EnumIter, IntoStaticStr, EnumCountMacro)]
+#[derive(Clone, Debug, Copy, PartialEq, EnumIter, IntoStaticStr, EnumCountMacro, EnumVariantNames)]
 enum Building {
     Wolfson,
     MGA,
