@@ -1,57 +1,62 @@
 use rand::Rng;
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use std::fmt;
+use std::io;
+use strum::{EnumCount, IntoEnumIterator};
+use strum_macros::{EnumCount as EnumCountMacro, EnumIter, IntoStaticStr};
 
 fn main() {}
 
-fn generate_sample_ballot(
-    group_number: u32,
-    household_number: u32,
-    building_number: u32,
-) -> Ballot {
-    // A ballot consissts of a list of buildings, groups, and accommodation
-    let mut buildings: Vec<u32> = (1..building_number).map(|n| 2 * n).collect();
-    let mut buildings: Vec<String> = (1..building_number)
-        .map(|i| format!("Building {j}", j = i.to_string()).to_string())
-        .collect();
+// fn generate_sample_ballot(
+//     group_number: u32,
+//     household_number: u32,
+//     building_number: u32,
+// ) -> Ballot {
+//     // A ballot consissts of a list of buildings, groups, and accommodation
+//     let mut buildings: Vec<u32> = (1..building_number).map(|n| 2 * n).collect();
+//     let mut buildings: Vec<String> = (1..building_number)
+//         .map(|i| format!("Building {j}", j = i.to_string()).to_string())
+//         .collect();
 
-    // Generate groups:
-    let mut groups: Vec<Group> = Vec::new();
-    for i in 1..group_number {
-        let mut members: Vec<Person> = Vec::new();
-        for j in 1..i * 2 {
-            members.push(Person {
-                name: format!("Person {j} in group {i}").to_string(),
-                score: i * 10 + j * 4,
-            })
-        }
-        groups.push(Group {
-            members,
-            household_preferences: None,
-            building_preferences: None,
-        })
-    }
+//     // Generate groups:
+//     let mut groups: Vec<Group> = Vec::new();
+//     for i in 1..group_number {
+//         let mut members: Vec<Person> = Vec::new();
+//         for j in 1..i * 2 {
+//             members.push(Person {
+//                 name: format!("Person {j} in group {i}").to_string(),
+//                 score: i * 10 + j * 4,
+//             })
+//         }
+//         groups.push(Group {
+//             members,
+//             household_preferences: None,
+//             building_preferences: None,
+//         })
+//     }
 
-    // Generate accommodation:
-    let mut accommodation: Vec<Household> = Vec::new();
-    for i in 1..household_number {
-        // Generate household
-        let mut rng = rand::thread_rng();
-        let size = (8i32 + rng.gen_range::<i32>(-8..8)) as u32;
-        Household {
-            name: format!("Household {i}")
-            size: 
-        }
-    } // left off here
-}
+//     // Generate accommodation:
+//     let mut accommodation: Vec<Household> = Vec::new();
+//     for i in 1..household_number {
+//         // Generate household
+//         let mut rng = rand::thread_rng();
+//         let size = (8i32 + rng.gen_range::<i32>(-8..8)) as u32;
+//         Household {
+//             name: format!("Household {i}")
+//             size:
+//         }
+//     } // left off here
+// }
 
 struct Ballot {
-    buildings: Vec<String>,
+    buildings: [Building; Building::COUNT],
     accommodation: Vec<Household>,
     groups: Vec<Group>,
 }
 impl Ballot {
-    fn allocate_rooms(&mut self, default_building_order: &Vec<String>) -> Vec<Group> {
+    fn allocate_rooms(
+        &mut self,
+        default_building_order: &[Building; Building::COUNT],
+    ) -> Vec<Group> {
         let mut accommodation = &mut self.accommodation;
         let mut groups = &mut self.groups;
         let mut excess_groups: Vec<Group> = Vec::new();
@@ -80,7 +85,7 @@ impl Ballot {
             let building_preferences = group
                 .building_preferences
                 .clone()
-                .unwrap_or_else(|| default_building_order.clone());
+                .unwrap_or_else(|| *default_building_order);
 
             for &building in &building_preferences {
                 // let relevant_households: Vec<Household> =
@@ -100,11 +105,11 @@ impl Ballot {
                 // let test: i32 = &accommodation;
 
                 for household in accommodation.iter_mut() {
-                    if !self.buildings.contains(&household.building) {
-                        let hb = &household.building;
-                        let hn = &household.name;
-                        panic!("The household {hn} is listed as being in building {hb}, but this is not in the building list of the ballot!")
-                    }
+                    // if !self.buildings.contains(&household.building) {
+                    //     let hb = &household.building;
+                    //     let hn = &household.name;
+                    //     panic!("The household {hn} is listed as being in building {hb}, but this is not in the building list of the ballot!")
+                    // }
                     if !household.can_fit(&group) || household.building != building {
                         continue;
                     } else {
@@ -131,7 +136,7 @@ struct Person {
 struct Group {
     members: Vec<Person>,
     household_preferences: Option<Vec<usize>>, //vector of indices to the accomodation vector of households
-    building_preferences: Option<Vec<String>>,
+    building_preferences: Option<[Building; Building::COUNT]>,
 }
 impl Group {
     fn score(&self) -> u32 {
@@ -152,10 +157,10 @@ struct Household {
     name: String,
     size: u32,
     occupants: Vec<Person>,
-    building: String,
+    building: Building,
 }
 impl Household {
-    fn new(name: String, size: u32, building: String) -> Self {
+    fn new(name: String, size: u32, building: Building) -> Self {
         Self {
             name,
             size,
@@ -175,22 +180,19 @@ impl Household {
     }
 }
 
-// #[derive(Clone, Debug, Copy, PartialEq, EnumIter)]
-// enum Building {
-//     Wolfson,
-//     MGA,
-//     RTB,
-//     MTB,
-//     Banbury82,
-//     Woodstock,
-// }
+#[derive(Clone, Debug, Copy, PartialEq, EnumIter, IntoStaticStr, EnumCountMacro)]
+enum Building {
+    Wolfson,
+    MGA,
+    RTB,
+    MTB,
+    Banbury85,
+    Woodstock82,
+}
 
-// struct Building {
-//     name: String,
-//     households: Vec<Household>,
-// }
-// impl Building {
-//     fn new(name: String, households: Vec<Household>) -> Self {
-//         Self { name, households }
-//     }
-// }
+impl fmt::Display for Building {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let building_name: &'static str = self.into();
+        write!(f, "{building_name}")
+    }
+}
