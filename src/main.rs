@@ -1,53 +1,124 @@
-use std::convert::TryFrom;
+use rand::Rng;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 fn main() {}
 
-fn allocate_rooms(
-    accommodation: &mut Vec<Household>,
-    groups: &mut Vec<Group>,
-    default_building_order: &Vec<Building>,
-) {
-    let mut groups = groups.clone();
-    groups.sort_unstable_by_key(|g| g.group_score());
-    for group in groups.iter() {
-        if let Some(household_preferences) = &group.household_preferences {
-            for household in household_preferences.iter() {
-                if household.is_full() {
-                    continue;
-                }
-            }
+fn generate_sample_ballot(
+    group_number: u32,
+    household_number: u32,
+    building_number: u32,
+) -> Ballot {
+    // A ballot consissts of a list of buildings, groups, and accommodation
+    let mut buildings: Vec<u32> = (1..building_number).map(|n| 2 * n).collect();
+    let mut buildings: Vec<String> = (1..building_number)
+        .map(|i| format!("Building {j}", j = i.to_string()).to_string())
+        .collect();
+
+    // Generate groups:
+    let mut groups: Vec<Group> = Vec::new();
+    for i in 1..group_number {
+        let mut members: Vec<Person> = Vec::new();
+        for j in 1..i * 2 {
+            members.push(Person {
+                name: format!("Person {j} in group {i}").to_string(),
+                score: i * 10 + j * 4,
+            })
         }
+        groups.push(Group {
+            members,
+            household_preferences: None,
+            building_preferences: None,
+        })
     }
+
+    // Generate accommodation:
+    let mut accommodation: Vec<Household> = Vec::new();
+    for i in 1..household_number {
+        // Generate household
+        let mut rng = rand::thread_rng();
+        let size = (8i32 + rng.gen_range::<i32>(-8..8)) as u32;
+        Household {
+            name: format!("Household {i}")
+            size: 
+        }
+    } // left off here
 }
-
-fn attempt_to_join_household(group: &Group, household: &mut Household) {}
-
-fn usize_to_u32(usize_value: &usize) -> u32 {
-    let u32_version = u32::try_from(*usize_value);
-    match u32_version {
-        Ok(n) => n,
-        Err(error) => panic!("{error}"),
-    }
-}
-
-// fn generate_sample_ballot() -> Vec<Building> {
-//     // let wolfson = Building {
-//     //     name: String::from("Wolfson")
-//     //     id: 1
-
-//     // };
-//     let b1 = Building {
-//         name: "Building 1".to_string(),
-//         households: vec![
-//             Household::new(name="Floor".to_string(), 8),
-//             Household::new(name="Floor 2".to_string(), 8)
-//         ]
-//     };
-//     let v = vec![];
-// }
 
 struct Ballot {
+    buildings: Vec<String>,
     accommodation: Vec<Household>,
+    groups: Vec<Group>,
+}
+impl Ballot {
+    fn allocate_rooms(&mut self, default_building_order: &Vec<String>) -> Vec<Group> {
+        let mut accommodation = &mut self.accommodation;
+        let mut groups = &mut self.groups;
+        let mut excess_groups: Vec<Group> = Vec::new();
+
+        // let mut groups = groups.clone(); // if you don't want to mutate the original groups passed in
+        groups.sort_unstable_by(|a, b| {
+            a.avg_score()
+                .partial_cmp(&b.avg_score())
+                .expect("Not a NaN")
+        }); // Since a, b are f64s, they do not have the Ord (total order) trait as f64s can be NaN, so you must implement a comparator function manually.
+        'group_loop: for group in groups.iter() {
+            // first, try to satisfy the specific household preferences
+            if let Some(household_preferences) = &group.household_preferences {
+                for household_index in household_preferences.iter() {
+                    let household = &mut accommodation[*household_index];
+                    if !(household.can_fit(&group)) {
+                        continue; // "continue" skips this iteration of the loop and moves to the next one
+                    } else {
+                        household.add_group(&group);
+                        continue 'group_loop;
+                    }
+                }
+            }
+
+            // second, try to fit the group into a household according to the building preference order
+            let building_preferences = group
+                .building_preferences
+                .clone()
+                .unwrap_or_else(|| default_building_order.clone());
+
+            for &building in &building_preferences {
+                // let relevant_households: Vec<Household> =
+                //     Vec::from_iter(accommodation.iter().filter(|h| match h.building {
+                //         building => true,
+                //         _ => false,
+                //     }));
+                // println!("{building:?}");
+
+                // let relevant_households: Vec<Household> = accommodation
+                //     .iter()
+                //     .filter(|h| match h.building {
+                //         building => true,
+                //         _ => false,
+                //     })
+                //     .collect();
+                // let test: i32 = &accommodation;
+
+                for household in accommodation.iter_mut() {
+                    if !self.buildings.contains(&household.building) {
+                        let hb = &household.building;
+                        let hn = &household.name;
+                        panic!("The household {hn} is listed as being in building {hb}, but this is not in the building list of the ballot!")
+                    }
+                    if !household.can_fit(&group) || household.building != building {
+                        continue;
+                    } else {
+                        household.add_group(&group);
+                        continue 'group_loop;
+                    }
+                }
+            }
+
+            // third, if the group cannot be fit into a household, we add them to the excess_groups vec which will be returned
+            excess_groups.push(group.clone())
+        }
+        return excess_groups;
+    }
 }
 
 #[derive(Clone)]
@@ -59,27 +130,21 @@ struct Person {
 #[derive(Clone)]
 struct Group {
     members: Vec<Person>,
-    household_preferences: Option<Vec<Household>>,
-    building_preferences: Option<Vec<Building>>,
+    household_preferences: Option<Vec<usize>>, //vector of indices to the accomodation vector of households
+    building_preferences: Option<Vec<String>>,
 }
 impl Group {
-    fn group_score(&self) -> u32 {
+    fn score(&self) -> u32 {
         self.members.iter().map(|m| m.score).sum()
     }
-    // fn generate_test_group() -> Group {
-    //     Group {
-    //         members: vec![
-    //             Person {
-    //                 name: "John".to_string(),
-    //                 score: 32,
-    //             },
-    //             Person {
-    //                 name: "Jane".to_string(),
-    //                 score: 30,
-    //             },
-    //         ],
-    //     }
-    // }
+    fn size(&self) -> u32 {
+        self.members.len() as u32
+    }
+    fn avg_score(&self) -> f64 {
+        let score_float = self.score() as f64;
+        let size_float = self.size() as f64;
+        score_float / size_float
+    }
 }
 
 #[derive(Clone)]
@@ -87,34 +152,38 @@ struct Household {
     name: String,
     size: u32,
     occupants: Vec<Person>,
-    building: Building,
+    building: String,
 }
 impl Household {
+    fn new(name: String, size: u32, building: String) -> Self {
+        Self {
+            name,
+            size,
+            building,
+            occupants: Vec::new(),
+        }
+    }
     fn can_fit(&self, new_group: &Group) -> bool {
-        // let num_occupants = u32::try_from(self.occupants.len());
-        // let num_occupants = match num_occupants {
-        //     Ok(n) => n,
-        //     Err(error) => {
-        //         let name = &self.name;
-        //         let occupants = &self.occupants.len();
-        //         let size = &self.size;
-        //         panic!("Household {name} is unbelievably full—it has {occupants} occupants when its size is only {size}. Error: {error}");
-        //     }
-        // };
-
-        return num_occupants + usize_to_u32(new_group.size) > self.size;
+        // A household can fit a group if its current occupants combined with the group's members is not bigger than its size
+        // use the "as" type cast expression to coerce usizes into u32s
+        return self.occupants.len() as u32 + new_group.members.len() as u32 > self.size;
+    }
+    fn add_group(&mut self, new_group: &Group) {
+        // NTS: Should probably refactor to include the can_fit logic and return a Result type
+        let mut member_vec = new_group.members.clone();
+        self.occupants.append(&mut member_vec);
     }
 }
 
-#[derive(Clone)]
-enum Building {
-    Wolfson,
-    MGA,
-    RTB,
-    MTB,
-    Banbury82,
-    Woodstock,
-}
+// #[derive(Clone, Debug, Copy, PartialEq, EnumIter)]
+// enum Building {
+//     Wolfson,
+//     MGA,
+//     RTB,
+//     MTB,
+//     Banbury82,
+//     Woodstock,
+// }
 
 // struct Building {
 //     name: String,
