@@ -1,23 +1,37 @@
 use rand::Rng;
 // use csv;
-use polars::prelude::*;
 use polars::prelude::CsvWriter;
+use polars::prelude::*;
 // use polars::df;
 use std::fs::File;
 
-const BUILDINGS: [&str; 6] = ["Wolfson", "MGA", "RTB", "MTB", "85 Banbury Rd", "85 Woodstock Rd"];
+const HUGHS_BUILDINGS: [&str; 6] = [
+    "Wolfson",
+    "MGA",
+    "RTB",
+    "MTB",
+    "85 Banbury Rd",
+    "85 Woodstock Rd",
+];
 // const BUILDINGS: [String; 6] = ["Wolfson".to_string(), "MGA".to_string(), "RTB".to_string(), "MTB".to_string(), "85 Banbury Rd".to_string(), "85 Woodstock Rd".to_string()];
 
 fn main() {
     let mut sample_ballot: Ballot = generate_sample_ballot(20, 5, 3);
-    let default_building_order: Vec<String> = BUILDINGS.iter().map(|s| s.to_string()).collect();
+    println!("{sb:?}", sb = sample_ballot.clone());
+    let default_building_order: Vec<String> =
+        HUGHS_BUILDINGS.iter().map(|s| s.to_string()).collect();
     sample_ballot.allocate_rooms(&default_building_order);
+    println!("\n");
+    println!("{sb:?}", sb = sample_ballot.clone());
     let mut df = DataFrame::from(sample_ballot);
     let mut file = File::create("ballot.csv").expect("could not create file");
-    CsvWriter::new(&mut file)
-    .has_header(true)
-    .with_delimiter(b',')
-    .finish(&mut df);
+    let result = CsvWriter::new(&mut file)
+        .has_header(true)
+        .with_delimiter(b',')
+        .finish(&mut df);
+    if let Err(e) = result {
+        println!("Error writing CSV: {e}")
+    }
 }
 
 fn generate_sample_ballot(
@@ -25,9 +39,13 @@ fn generate_sample_ballot(
     household_number: u32,
     building_number: u32,
 ) -> Ballot {
+    fn building_from_number(num: u32) -> String {
+        format!("Building {num}")
+    }
+
     // A ballot consissts of a list of buildings, groups, and accommodation
-    let mut buildings: Vec<String> = (1..building_number)
-        .map(|i| format!("Building {j}", j = i.to_string()).to_string())
+    let buildings: Vec<String> = (1..=building_number)
+        .map(|i| building_from_number(i).to_string())
         .collect();
 
     // Generate groups:
@@ -54,16 +72,27 @@ fn generate_sample_ballot(
         let mut rng = rand::thread_rng();
         let size = rng.gen_range(1..=10);
         let name = format!("Household {i}");
-        let building_index = rng.gen_range(0..BUILDINGS.len());
-        let building = BUILDINGS.get(building_index).expect("Index should be in BUILDINGS").to_string();
+        let i = rng.gen_range(1..=building_number);
+        let building = building_from_number(i);
+        // Old code from when generate_sample_ballot used Hughs buildings
+        // let building_index = rng.gen_range(0..HUGHS_BUILDINGS.len());
+        // let building = HUGHS_BUILDINGS
+        //     .get(building_index)
+        //     .expect("Index should be in BUILDINGS")
+        //     .to_string();
         accommodation.push(Household::new(name, size, building));
     } // left off here
 
     // let buildings: Vec<String> = BUILDINGS.iter().map(|s| s.to_string()).collect();
 
-    Ballot { buildings, accommodation, excess_groups: groups }
+    Ballot {
+        buildings,
+        accommodation,
+        excess_groups: groups,
+    }
 }
 
+#[derive(Debug, Clone)]
 struct Ballot {
     buildings: Vec<String>,
     accommodation: Vec<Household>,
@@ -71,8 +100,8 @@ struct Ballot {
 }
 impl Ballot {
     fn allocate_rooms(&mut self, default_building_order: &Vec<String>) {
-        let mut accommodation = &mut self.accommodation;
-        let mut old_excess_groups = &mut self.excess_groups;
+        let accommodation = &mut self.accommodation;
+        let old_excess_groups = &mut self.excess_groups;
         let mut new_excess_groups: Vec<Group> = Vec::new();
 
         // let mut groups = groups.clone(); // if you don't want to mutate the original groups passed in
@@ -143,27 +172,74 @@ impl Ballot {
 impl From<Ballot> for DataFrame {
     fn from(item: Ballot) -> Self {
         let accom: Vec<Household> = item.accommodation;
-        let s1 = Series::new("Household name", accom.iter().map(|haus| haus.name).collect()); 
-        let s2 = Series::new("Building", accom.iter().map(|haus| haus.building).collect());
-        let s3 = Series::new("Size", accom.iter().map(|haus| haus.size).collect());
-        let s4 = Series::new("Occupants", accom.iter().map(|haus| haus.occupants)).collect();
+        let s1: Series = Series::new(
+            "Household name",
+            accom
+                .iter()
+                .map(|haus| haus.clone().name)
+                .collect::<Vec<String>>(),
+        );
+        let s2: Series = Series::new(
+            "Building",
+            accom
+                .iter()
+                .map(|haus| haus.clone().building)
+                .collect::<Vec<String>>(),
+        );
+        let s3: Series = Series::new(
+            "Size",
+            accom.iter().map(|haus| haus.size).collect::<Vec<u32>>(),
+        );
+        let occupantsvecvec: Vec<Vec<Person>> =
+            accom.iter().map(|haus| haus.clone().occupants).collect();
+        let occupantsstringvec: Vec<String> = occupantsvecvec
+            .iter()
+            .map(|ov| {
+                String::from(Group {
+                    members: ov.clone(),
+                    household_preferences: None,
+                    building_preferences: None,
+                })
+            })
+            .collect();
+        println!("{osv:?}", osv=occupantsstringvec.clone());
+        let s4: Series = Series::new("Occupants", occupantsstringvec);
 
-        let df = DataFrame::new(vec![s1,s2,s3,s4]).expect("Couldn't create DataFrame");
+        let df = DataFrame::new(vec![s1, s2, s3, s4]).expect("Couldn't create DataFrame");
         df
     }
 }
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Person {
     name: String,
     score: u32,
 }
 
-#[derive(Clone)]
+impl From<Person> for String {
+    fn from(item: Person) -> String {
+        let name = item.name;
+        let score = item.score;
+        format!("{name} [{score}]")
+    }
+}
+
+#[derive(Clone, Debug)]
 struct Group {
     members: Vec<Person>,
     household_preferences: Option<Vec<usize>>, //vector of indices to the accomodation vector of households
     building_preferences: Option<Vec<String>>,
+}
+
+impl From<Group> for String {
+    fn from(item: Group) -> String {
+        let person_string_list: Vec<String> = item
+            .members
+            .iter()
+            .map(|p| String::from(p.clone()))
+            .collect();
+        let group_string: String = person_string_list.join(", ");
+        group_string
+    }
 }
 impl Group {
     fn score(&self) -> u32 {
@@ -179,7 +255,7 @@ impl Group {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Household {
     name: String,
     size: u32,
