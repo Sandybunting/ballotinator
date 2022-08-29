@@ -1,9 +1,23 @@
 use rand::Rng;
+// use csv;
+use polars::prelude::*;
+use polars::prelude::CsvWriter;
+// use polars::df;
+use std::fs::File;
 
 const BUILDINGS: [&str; 6] = ["Wolfson", "MGA", "RTB", "MTB", "85 Banbury Rd", "85 Woodstock Rd"];
+// const BUILDINGS: [String; 6] = ["Wolfson".to_string(), "MGA".to_string(), "RTB".to_string(), "MTB".to_string(), "85 Banbury Rd".to_string(), "85 Woodstock Rd".to_string()];
 
 fn main() {
-    let sample_ballot: Ballot = generate_sample_ballot(20, 5, 3);
+    let mut sample_ballot: Ballot = generate_sample_ballot(20, 5, 3);
+    let default_building_order: Vec<String> = BUILDINGS.iter().map(|s| s.to_string()).collect();
+    sample_ballot.allocate_rooms(&default_building_order);
+    let mut df = DataFrame::from(sample_ballot);
+    let mut file = File::create("ballot.csv").expect("could not create file");
+    CsvWriter::new(&mut file)
+    .has_header(true)
+    .with_delimiter(b',')
+    .finish(&mut df);
 }
 
 fn generate_sample_ballot(
@@ -12,7 +26,6 @@ fn generate_sample_ballot(
     building_number: u32,
 ) -> Ballot {
     // A ballot consissts of a list of buildings, groups, and accommodation
-    let mut buildings: Vec<u32> = (1..building_number).map(|n| 2 * n).collect();
     let mut buildings: Vec<String> = (1..building_number)
         .map(|i| format!("Building {j}", j = i.to_string()).to_string())
         .collect();
@@ -48,27 +61,27 @@ fn generate_sample_ballot(
 
     // let buildings: Vec<String> = BUILDINGS.iter().map(|s| s.to_string()).collect();
 
-    Ballot { buildings, accommodation, groups }
+    Ballot { buildings, accommodation, excess_groups: groups }
 }
 
 struct Ballot {
     buildings: Vec<String>,
     accommodation: Vec<Household>,
-    groups: Vec<Group>,
+    excess_groups: Vec<Group>,
 }
 impl Ballot {
-    fn allocate_rooms(&mut self, default_building_order: &Vec<String>) -> Vec<Group> {
+    fn allocate_rooms(&mut self, default_building_order: &Vec<String>) {
         let mut accommodation = &mut self.accommodation;
-        let mut groups = &mut self.groups;
-        let mut excess_groups: Vec<Group> = Vec::new();
+        let mut old_excess_groups = &mut self.excess_groups;
+        let mut new_excess_groups: Vec<Group> = Vec::new();
 
         // let mut groups = groups.clone(); // if you don't want to mutate the original groups passed in
-        groups.sort_unstable_by(|a, b| {
+        old_excess_groups.sort_unstable_by(|a, b| {
             a.avg_score()
                 .partial_cmp(&b.avg_score())
                 .expect("Not a NaN")
         }); // Since a, b are f64s, they do not have the Ord (total order) trait as f64s can be NaN, so you must implement a comparator function manually.
-        'group_loop: for group in groups.iter() {
+        'group_loop: for group in old_excess_groups.iter() {
             // first, try to satisfy the specific household preferences
             if let Some(household_preferences) = &group.household_preferences {
                 for household_index in household_preferences.iter() {
@@ -88,7 +101,7 @@ impl Ballot {
                 .clone()
                 .unwrap_or_else(|| default_building_order.clone());
 
-            for &building in &building_preferences {
+            for building in building_preferences {
                 // let relevant_households: Vec<Household> =
                 //     Vec::from_iter(accommodation.iter().filter(|h| match h.building {
                 //         building => true,
@@ -121,9 +134,22 @@ impl Ballot {
             }
 
             // third, if the group cannot be fit into a household, we add them to the excess_groups vec which will be returned
-            excess_groups.push(group.clone())
+            new_excess_groups.push(group.clone())
         }
-        return excess_groups;
+        self.excess_groups = new_excess_groups;
+    }
+}
+
+impl From<Ballot> for DataFrame {
+    fn from(item: Ballot) -> Self {
+        let accom: Vec<Household> = item.accommodation;
+        let s1 = Series::new("Household name", accom.iter().map(|haus| haus.name).collect()); 
+        let s2 = Series::new("Building", accom.iter().map(|haus| haus.building).collect());
+        let s3 = Series::new("Size", accom.iter().map(|haus| haus.size).collect());
+        let s4 = Series::new("Occupants", accom.iter().map(|haus| haus.occupants)).collect();
+
+        let df = DataFrame::new(vec![s1,s2,s3,s4]).expect("Couldn't create DataFrame");
+        df
     }
 }
 
