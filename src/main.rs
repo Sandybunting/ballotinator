@@ -1,10 +1,10 @@
 use rand::Rng;
-use std::fmt;
-use std::io;
-use strum::{EnumCount, IntoEnumIterator, VariantNames};
-use strum_macros::{EnumCount as EnumCountMacro, EnumIter, IntoStaticStr, EnumVariantNames};
 
-fn main() {}
+const BUILDINGS: [&str; 6] = ["Wolfson", "MGA", "RTB", "MTB", "85 Banbury Rd", "85 Woodstock Rd"];
+
+fn main() {
+    let sample_ballot: Ballot = generate_sample_ballot(20, 5, 3);
+}
 
 fn generate_sample_ballot(
     group_number: u32,
@@ -12,7 +12,10 @@ fn generate_sample_ballot(
     building_number: u32,
 ) -> Ballot {
     // A ballot consissts of a list of buildings, groups, and accommodation
-    let buildings = Building::;
+    let mut buildings: Vec<u32> = (1..building_number).map(|n| 2 * n).collect();
+    let mut buildings: Vec<String> = (1..building_number)
+        .map(|i| format!("Building {j}", j = i.to_string()).to_string())
+        .collect();
 
     // Generate groups:
     let mut groups: Vec<Group> = Vec::new();
@@ -36,24 +39,25 @@ fn generate_sample_ballot(
     for i in 1..household_number {
         // Generate household
         let mut rng = rand::thread_rng();
-        let size = (8i32 + rng.gen_range::<i32>(-8..8)) as u32;
-        Household {
-            name: format!("Household {i}"),
-            size:
-        }
+        let size = rng.gen_range(1..=10);
+        let name = format!("Household {i}");
+        let building_index = rng.gen_range(0..BUILDINGS.len());
+        let building = BUILDINGS.get(building_index).expect("Index should be in BUILDINGS").to_string();
+        accommodation.push(Household::new(name, size, building));
     } // left off here
+
+    // let buildings: Vec<String> = BUILDINGS.iter().map(|s| s.to_string()).collect();
+
+    Ballot { buildings, accommodation, groups }
 }
 
 struct Ballot {
-    buildings: [Building; Building::COUNT],
+    buildings: Vec<String>,
     accommodation: Vec<Household>,
     groups: Vec<Group>,
 }
 impl Ballot {
-    fn allocate_rooms(
-        &mut self,
-        default_building_order: &[Building; Building::COUNT],
-    ) -> Vec<Group> {
+    fn allocate_rooms(&mut self, default_building_order: &Vec<String>) -> Vec<Group> {
         let mut accommodation = &mut self.accommodation;
         let mut groups = &mut self.groups;
         let mut excess_groups: Vec<Group> = Vec::new();
@@ -82,7 +86,7 @@ impl Ballot {
             let building_preferences = group
                 .building_preferences
                 .clone()
-                .unwrap_or_else(|| *default_building_order);
+                .unwrap_or_else(|| default_building_order.clone());
 
             for &building in &building_preferences {
                 // let relevant_households: Vec<Household> =
@@ -102,11 +106,11 @@ impl Ballot {
                 // let test: i32 = &accommodation;
 
                 for household in accommodation.iter_mut() {
-                    // if !self.buildings.contains(&household.building) {
-                    //     let hb = &household.building;
-                    //     let hn = &household.name;
-                    //     panic!("The household {hn} is listed as being in building {hb}, but this is not in the building list of the ballot!")
-                    // }
+                    if !self.buildings.contains(&household.building) {
+                        let hb = &household.building;
+                        let hn = &household.name;
+                        panic!("The household {hn} is listed as being in building {hb}, but this is not in the building list of the ballot!")
+                    }
                     if !household.can_fit(&group) || household.building != building {
                         continue;
                     } else {
@@ -133,7 +137,7 @@ struct Person {
 struct Group {
     members: Vec<Person>,
     household_preferences: Option<Vec<usize>>, //vector of indices to the accomodation vector of households
-    building_preferences: Option<[Building; Building::COUNT]>,
+    building_preferences: Option<Vec<String>>,
 }
 impl Group {
     fn score(&self) -> u32 {
@@ -154,10 +158,10 @@ struct Household {
     name: String,
     size: u32,
     occupants: Vec<Person>,
-    building: Building,
+    building: String,
 }
 impl Household {
-    fn new(name: String, size: u32, building: Building) -> Self {
+    fn new(name: String, size: u32, building: String) -> Self {
         Self {
             name,
             size,
@@ -167,34 +171,32 @@ impl Household {
     }
     fn can_fit(&self, new_group: &Group) -> bool {
         // A household can fit a group if its current occupants combined with the group's members is not bigger than its size
-
         // use the "as" type cast expression to coerce usizes into u32s
         return self.occupants.len() as u32 + new_group.members.len() as u32 > self.size;
     }
     fn add_group(&mut self, new_group: &Group) {
         // NTS: Should probably refactor to include the can_fit logic and return a Result type
-        if self.can_fit(new_group) {
-            let mut member_vec = new_group.members.clone();
-            self.occupants.append(&mut member_vec);
-        } else {
-            panic!();
-        }
+        let mut member_vec = new_group.members.clone();
+        self.occupants.append(&mut member_vec);
     }
 }
 
-#[derive(Clone, Debug, Copy, PartialEq, EnumIter, IntoStaticStr, EnumCountMacro, EnumVariantNames)]
-enum Building {
-    Wolfson,
-    MGA,
-    RTB,
-    MTB,
-    Banbury85,
-    Woodstock82,
-}
+// #[derive(Clone, Debug, Copy, PartialEq, EnumIter)]
+// enum Building {
+//     Wolfson,
+//     MGA,
+//     RTB,
+//     MTB,
+//     Banbury82,
+//     Woodstock,
+// }
 
-impl fmt::Display for Building {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let building_name: &'static str = self.into();
-        write!(f, "{building_name}")
-    }
-}
+// struct Building {
+//     name: String,
+//     households: Vec<Household>,
+// }
+// impl Building {
+//     fn new(name: String, households: Vec<Household>) -> Self {
+//         Self { name, households }
+//     }
+// }
