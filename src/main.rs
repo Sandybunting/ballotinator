@@ -72,7 +72,7 @@ impl Group {
 struct Household {
     name: String,
     size: u32,
-    groups: Vec<Group>,
+    occupants: Vec<Person>,
     building: String,
 }
 impl Household {
@@ -81,12 +81,12 @@ impl Household {
             name,
             size,
             building,
-            groups: Vec::new(),
+            occupants: Vec::new(),
         }
     }
-    fn occupants(&self) -> Vec<Person> {
-        self.groups.iter().map(|group| group.members.clone()).flatten().collect()
-    }
+    // fn occupants(&self) -> Vec<Person> {
+    //     self.occupants.iter().map(|group| group.members.clone()).flatten().collect()
+    // }
     fn attempt_to_add_group(&mut self, new_group: &Group) -> Result<(), ()> {
         if self.can_fit(new_group) {
             self.add_group(new_group);
@@ -98,12 +98,12 @@ impl Household {
     fn can_fit(&self, new_group: &Group) -> bool {
         // A household can fit a group if its current occupants combined with the group's members is not bigger than its size
         // use the "as" type cast expression to coerce usizes into u32s
-        let occupants_num: u32 = self.groups.iter().map(|g| g.size()).sum();
+        let occupants_num: u32 = self.occupants.len() as u32;
         let new_group_members_num: u32 = u32::try_from(new_group.members.len()).ok().expect("The number of new group members should be << 2^32");
         return occupants_num + new_group_members_num < self.size;
     }
     fn add_group(&mut self, new_group: &Group) {
-        self.groups.push(new_group.clone());
+        self.occupants.append(&mut new_group.members.clone());
     }
 }
 
@@ -202,7 +202,7 @@ impl From<Ballot> for DataFrame {
             accom.iter().map(|haus| haus.size).collect::<Vec<u32>>(),
         );
         let occupantsvecvec: Vec<Vec<Person>> =
-            accom.iter().map(|haus| haus.occupants().clone()).collect();
+            accom.iter().map(|haus| haus.occupants.clone()).collect();
         let occupantsstringvec: Vec<String> = occupantsvecvec
             .iter()
             .map(|ov| {
@@ -326,25 +326,3 @@ where
 {
     v1.iter().all(|item| v2.contains(item))
 }
-
-
-
-// #[derive(Clone, Debug, Copy, PartialEq, EnumIter)]
-// enum Building {
-//     Wolfson,
-//     MGA,
-//     RTB,
-//     MTB,
-//     Banbury82,
-//     Woodstock,
-// }
-
-// struct Building {
-//     name: String,
-//     households: Vec<Household>,
-// }
-// impl Building {
-//     fn new(name: String, households: Vec<Household>) -> Self {
-//         Self { name, households }
-//     }
-// }
